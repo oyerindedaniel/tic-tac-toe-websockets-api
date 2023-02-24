@@ -1,0 +1,9 @@
+.env
+node_modules
+build
+*code-workspace
+pdfile.ts
+.DS_Store
+uploads/*
+!uploads/.gitkeep
+!uploads/*.ts
