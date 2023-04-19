@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import { Server, Socket } from 'socket.io';
 import UserConnection from './user';
+// import GameConnection from './game';
 
 class WebSocketConnection extends UserConnection {
   // eslint-disable-next-line @typescript-eslint/no-useless-constructor
@@ -15,6 +16,8 @@ class WebSocketConnection extends UserConnection {
 
       this.addUser();
 
+      this.requestStartGame();
+
       this.socket.on('disconnect', () => {
         this.disconnectSocket();
       });
@@ -25,7 +28,7 @@ class WebSocketConnection extends UserConnection {
     if (this.socket) {
       this.removeUser();
       this.socket.disconnect();
-      console.log(`User Disconnected: ${this.socket.id} 👋🏼`);
+      console.log(`User Disconnected: ${this.socket.id} ❌`);
     }
   }
 }
