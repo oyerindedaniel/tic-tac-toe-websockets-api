@@ -1,35 +1,31 @@
 /* eslint-disable no-console */
 import { Server, Socket } from 'socket.io';
-import { User } from '../types';
+import UserConnection from './user';
 
-class WebSocketConnection {
-  users: Array<User> = [];
-
-  socket: Socket | null = null;
-
-  io: Server;
-
+class WebSocketConnection extends UserConnection {
+  // eslint-disable-next-line @typescript-eslint/no-useless-constructor
   constructor(io: Server) {
-    this.io = io;
+    super(io);
   }
 
-  connect() {
+  connectSocket() {
     this.io.on('connection', (socket: Socket) => {
       this.socket = socket;
-      console.log(`User Connected: ${socket.id} 👋🏼`);
+      console.log(`User Connected: ${this.socket.id} 👋🏼`);
+
+      this.addUser();
 
       this.socket.on('disconnect', () => {
-        console.log(`User Disconnected: ${socket.id} 👋🏼`);
-        if (this.socket) {
-          this.socket.disconnect();
-        }
+        this.disconnectSocket();
       });
     });
   }
 
-  disconnect() {
+  disconnectSocket() {
     if (this.socket) {
+      this.removeUser();
       this.socket.disconnect();
+      console.log(`User Disconnected: ${this.socket.id} 👋🏼`);
     }
   }
 }
