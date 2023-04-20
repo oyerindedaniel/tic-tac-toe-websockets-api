@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import { Socket, Server } from 'socket.io';
-import { User } from '../types';
+import { User, Message } from '../types';
 
 class UserConnection {
   io: Server;
@@ -11,54 +11,87 @@ class UserConnection {
 
   users: Array<User> = [];
 
-  player1: (User & { isPlay: boolean }) | null = null; // Initiates the initial start game
+  gameRequestsUsers: Array<User> = [];
 
-  player2: (User & { isPlay: boolean }) | null = null; // the other player
+  player1: User | null = null; // Initiates the initial start game
+
+  player2: User | null = null; // the other player
 
   socket: Socket | null = null;
 
-  addUser() {
+  addUser(data: User) {
     if (this.socket?.connected) {
-      this.socket.on('newUser', (data: User) => {
-        const isUserExists = this.users.find(
-          (user) => user.socketID === this.socket?.id
+      const isUserExists = this.users.find(
+        (user) => user.socketID === this.socket?.id
+      );
+      if (!isUserExists) {
+        this.users.push({
+          userName: data.userName,
+          socketID: data.socketID,
+          userPhotoId: data.userPhotoId,
+          isPlaying: false,
+          isRequestAccepted: false,
+          requests: [],
+        });
+        this.emitAllConnectedUsers();
+        // this.emitActiveUsers();
+      }
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  requestStartGame(data: User) {
+    if (this.socket?.connected) {
+      // Player that made the request for start game
+      const requestPlayer = this.users.find(
+        (user) => user.socketID === this.socket?.id
+      ) as User;
+      // Check if requested Player exists
+      const foundOpponent = this.gameRequestsUsers.find(
+        (user: User) => user.socketID === data.socketID
+      ) as User;
+
+      if (foundOpponent) {
+        // Check if request by player as been made already .
+        const foundRequestPlayer = foundOpponent.requests.find(
+          (user) => user.socketID === requestPlayer.socketID
         );
-        if (!isUserExists) {
-          this.users.push({
-            userName: data.userName,
-            socketID: data.socketID,
-            userPhotoId: data.userPhotoId,
+        if (foundRequestPlayer)
+          return this.errorPlayerHandler(requestPlayer, {
+            message: `You have already sent a game request to ${foundOpponent.userName}. Please wait for their response.`,
+            status: 'warning',
           });
-          this.emitAllConnectedUsers();
-          // this.emitActiveUsers();
-        }
-      });
+        foundOpponent.requests.push({ ...requestPlayer });
+      } else {
+        const addPlayer = {
+          ...data,
+          requests: [{ ...requestPlayer } as User],
+        };
+        this.gameRequestsUsers.push(addPlayer);
+      }
+
+      this.requestGamePlayer2(data);
     } else {
       console.error('Socket is not connected!');
     }
   }
 
-  requestStartGame() {
+  errorPlayerHandler(data: User, message: Message) {
     if (this.socket?.connected) {
-      this.socket.on('requestStartGame', (data: User) => {
-        console.log(this.socket?.id);
-        const player1User = this.users.find(
-          (user) => user.socketID === this.socket?.id
-        );
-        if (player1User) this.player1 = { ...player1User, isPlay: true };
-        this.player2 = { ...data, isPlay: false };
-        this.requestGamePlayer2();
-      });
+      this.io.to(data.socketID).emit('status', message);
     } else {
       console.error('Socket is not connected!');
     }
   }
 
-  requestGamePlayer2() {
-    if (this.socket?.connected && this.player2) {
-      console.log(this.player1);
-      console.log(this.player2);
-      this.io.to(this.player2?.socketID).emit('requestPlayer2', this.player1);
+  requestGamePlayer2(data: User) {
+    if (this.socket?.connected) {
+      const requestedUser = this.gameRequestsUsers.find(
+        (user) => user.socketID === data.socketID
+      ) as User;
+
+      this.io.to(data.socketID).emit('requestPlayer2', requestedUser);
     } else {
       console.error('Socket is not connected!');
     }
@@ -99,8 +132,8 @@ class UserConnection {
       this.users = this.users.filter(
         (user) => user.socketID !== this.socket?.id
       );
+      this.emitAllConnectedUsers();
       console.log(`User Removed: ${this.socket.id} ❌`);
-      console.log(this.users);
     } else {
       console.error('Socket is not connected!');
     }

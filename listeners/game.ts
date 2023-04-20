@@ -4,7 +4,7 @@ import { User } from '../types';
 import UserConnection from './user';
 
 class GameConnection extends UserConnection {
-  addGamePlayer() {
+  addDemoGamePlayer() {
     if (this.socket?.connected) {
       this.socket.on('requestGamePlay', (data: User) => {
         console.log(data);
