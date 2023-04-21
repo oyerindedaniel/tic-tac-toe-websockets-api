@@ -17,12 +17,22 @@ class WebSocketConnection extends UserConnection {
 
       this.socket.on('newUser', (data: User) => {
         this.socket = socket;
-        this.addUser(data);
+        this.addNewUser(data);
       });
 
       this.socket.on('requestPlayer', (data: User) => {
         this.socket = socket;
         this.requestStartGame(data);
+      });
+
+      this.socket.on('acceptRequestPlayer', (data: User) => {
+        this.socket = socket;
+        this.acceptRequestPlayer(data);
+      });
+
+      this.socket.on('declineRequestPlayer', (data: User) => {
+        this.socket = socket;
+        this.declineRequestPlayer(data);
       });
 
       this.socket.on('disconnect', () => {
@@ -34,7 +44,7 @@ class WebSocketConnection extends UserConnection {
 
   disconnectSocket() {
     if (this.socket) {
-      this.removeUser();
+      this.removeDiscountedUser();
       this.socket.disconnect();
       console.log(`User Disconnected: ${this.socket.id} ❌`);
     }

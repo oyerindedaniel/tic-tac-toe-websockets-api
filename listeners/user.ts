@@ -19,8 +19,13 @@ class UserConnection {
 
   socket: Socket | null = null;
 
-  addUser(data: User) {
+  addNewUser(data: User) {
     if (this.socket?.connected) {
+      if (!data?.socketID)
+        return this.messagePlayerHandler({
+          message: `You Left the waiting room. Join Again 😁`,
+          status: 'error',
+        });
       const isUserExists = this.users.find(
         (user) => user.socketID === this.socket?.id
       );
@@ -31,6 +36,8 @@ class UserConnection {
           userPhotoId: data.userPhotoId,
           isPlaying: false,
           isRequestAccepted: false,
+          isRequestDeclined: false,
+          acceptedRequest: false,
           requests: [],
         });
         this.emitAllConnectedUsers();
@@ -59,7 +66,7 @@ class UserConnection {
           (user) => user.socketID === requestPlayer.socketID
         );
         if (foundRequestPlayer)
-          return this.errorPlayerHandler({
+          return this.messagePlayerHandler({
             message: `You have already sent a game request to ${foundOpponent.userName}. Please wait for their response.`,
             status: 'warning',
           });
@@ -78,8 +85,99 @@ class UserConnection {
     }
   }
 
-  errorPlayerHandler(message: Message) {
+  acceptRequestPlayer(data: User) {
     if (this.socket?.connected) {
+      // Player that accepted the request
+      const acceptRequestPlayer = this.gameRequestsUsers.find(
+        (user) => user.socketID === this.socket?.id
+      ) as User;
+
+      if (!acceptRequestPlayer) return;
+      acceptRequestPlayer.acceptedRequest = true;
+
+      // Player that made the initial request
+      const requestPlayer = acceptRequestPlayer.requests.find(
+        (user) => user.socketID === data.socketID
+      ) as User;
+
+      if (!requestPlayer) return;
+      requestPlayer.isRequestAccepted = true;
+      requestPlayer.isRequestDeclined = false;
+
+      // Remove the users for list of connected Users because both users have accepted the request
+      // this.removeUser([acceptRequestPlayer, requestPlayer]);
+
+      this.emitToPlayer(
+        requestPlayer,
+        acceptRequestPlayer,
+        'acceptRequestPlayer'
+      );
+
+      this.messagePlayerHandler(
+        {
+          title: 'Accepted Game Request',
+          message: `${acceptRequestPlayer.userName} accepted your game request. Do you still want to play.`,
+          status: 'success',
+        },
+        requestPlayer.socketID,
+        acceptRequestPlayer.socketID
+      );
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  declineRequestPlayer(data: User) {
+    if (this.socket?.connected) {
+      // Player that declined the request
+      const declineRequestPlayer = this.gameRequestsUsers.find(
+        (user) => user.socketID === this.socket?.id
+      ) as User;
+
+      if (declineRequestPlayer) {
+        declineRequestPlayer.acceptedRequest = false;
+        // Player that made the initial request
+        const requestPlayer = declineRequestPlayer.requests.find(
+          (user) => user.socketID === data.socketID
+        ) as User;
+
+        if (requestPlayer) {
+          requestPlayer.isRequestAccepted = false;
+          requestPlayer.isRequestDeclined = true;
+        }
+
+        this.emitToPlayer(
+          requestPlayer,
+          declineRequestPlayer,
+          'acceptRequestPlayer'
+        );
+
+        this.messagePlayerHandler(
+          {
+            title: 'Declined Game Request',
+            message: `${declineRequestPlayer.userName} declined your game request. Do you still want to another game request.`,
+            status: 'success',
+          },
+          requestPlayer.socketID
+        );
+      }
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  messagePlayerHandler(
+    message: Message,
+    socketId?: string,
+    messageSocketId?: string
+  ) {
+    if (this.socket?.connected) {
+      if (socketId)
+        return this.io.to(socketId).emit('status', {
+          ...message,
+          ...(messageSocketId ? { messageSocketId } : {}),
+        });
+
       this.socket.emit('status', message);
     } else {
       console.error('Socket is not connected!');
@@ -95,6 +193,10 @@ class UserConnection {
     } else {
       console.error('Socket is not connected!');
     }
+  }
+
+  emitToPlayer(reqData: User, resData: User, socketName: string) {
+    this.io.to(reqData.socketID).emit(socketName, resData);
   }
 
   emitActiveUsers() {
@@ -121,16 +223,55 @@ class UserConnection {
     }
   }
 
+  addUser(addUsers: Array<User>) {
+    if (this?.socket) {
+      this.users = this.users.filter((user) => !addUsers.includes(user));
+      this.emitAllConnectedUsers();
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
   emitAllConnectedUsers() {
     this.io.emit('allConnectedUsers', this.users);
   }
 
-  removeUser() {
+  emitAllGameRequestsUsers() {
+    this.gameRequestsUsers.forEach((user) => {
+      this.io.to(user.socketID).emit('allGameRequestsUsers', user);
+    });
+  }
+
+  removeUser(removeUsers: Array<User>) {
+    if (this?.socket) {
+      this.users = this.users.filter(
+        (user) => !removeUsers.some((u) => u.socketID === user.socketID)
+      );
+      this.emitAllConnectedUsers();
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  removeDiscountedUser() {
     if (this?.socket) {
       this.users = this.users.filter(
         (user) => user.socketID !== this.socket?.id
       );
+
+      this.gameRequestsUsers = this.gameRequestsUsers
+        .filter((user) => user.socketID !== this.socket?.id)
+        .map((user) => {
+          if (user.requests) {
+            const filteredRequests = user.requests.filter(
+              (u) => u.socketID !== this.socket?.id
+            );
+            return { ...user, requests: filteredRequests };
+          }
+          return user;
+        });
       this.emitAllConnectedUsers();
+      this.emitAllGameRequestsUsers();
       console.log(`User Removed: ${this.socket.id} ❌`);
     } else {
       console.error('Socket is not connected!');
