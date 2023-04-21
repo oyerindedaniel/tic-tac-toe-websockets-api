@@ -22,5 +22,3 @@ server.listen(PORT, () => {
   const webSocketConnection = new WebSocketConnection(io);
   webSocketConnection.connectSocket();
 })();
-
-console.log('dn');

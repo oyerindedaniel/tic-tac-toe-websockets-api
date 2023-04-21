@@ -16,14 +16,17 @@ class WebSocketConnection extends UserConnection {
       console.log(`User Connected: ${this.socket.id} 👋🏼`);
 
       this.socket.on('newUser', (data: User) => {
+        this.socket = socket;
         this.addUser(data);
       });
 
       this.socket.on('requestPlayer', (data: User) => {
+        this.socket = socket;
         this.requestStartGame(data);
       });
 
       this.socket.on('disconnect', () => {
+        this.socket = socket;
         this.disconnectSocket();
       });
     });
