@@ -25,14 +25,19 @@ class WebSocketConnection extends UserConnection {
         this.requestStartGame(data);
       });
 
-      this.socket.on('acceptRequestPlayer', (data: User) => {
+      this.socket.on('makeAcceptPlayerRequest', (data: User) => {
         this.socket = socket;
-        this.acceptRequestPlayer(data);
+        this.makeAcceptPlayerRequest(data);
       });
 
-      this.socket.on('declineRequestPlayer', (data: User) => {
+      this.socket.on('acceptPlayerRequest', (data: User) => {
         this.socket = socket;
-        this.declineRequestPlayer(data);
+        this.acceptPlayerRequest(data);
+      });
+
+      this.socket.on('declinePlayerRequest', (data: User) => {
+        this.socket = socket;
+        this.declinePlayerRequest(data);
       });
 
       this.socket.on('disconnect', () => {

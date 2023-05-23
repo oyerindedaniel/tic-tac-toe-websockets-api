@@ -11,6 +11,7 @@ class UserConnection {
 
   users: Array<User> = [];
 
+  // Objects of requested Player with array of player that made requests
   gameRequestsUsers: Array<User> = [];
 
   player1: User | null = null; // Initiates the initial start game
@@ -85,7 +86,7 @@ class UserConnection {
     }
   }
 
-  acceptRequestPlayer(data: User) {
+  makeAcceptPlayerRequest(data: User) {
     if (this.socket?.connected) {
       // Player that accepted the request
       const acceptRequestPlayer = this.gameRequestsUsers.find(
@@ -101,17 +102,18 @@ class UserConnection {
       ) as User;
 
       if (!requestPlayer) return;
-      requestPlayer.isRequestAccepted = true;
-      requestPlayer.isRequestDeclined = false;
 
       // Remove the users for list of connected Users because both users have accepted the request
       // this.removeUser([acceptRequestPlayer, requestPlayer]);
 
+      // populates the modal open button used in frontend
       this.emitToPlayer(
         requestPlayer,
         acceptRequestPlayer,
-        'acceptRequestPlayer'
+        'makeAcceptPlayerRequest'
       );
+
+      this.emitToSelf(requestPlayer);
 
       this.messagePlayerHandler(
         {
@@ -127,7 +129,42 @@ class UserConnection {
     }
   }
 
-  declineRequestPlayer(data: User) {
+  acceptPlayerRequest(data: User) {
+    if (this.socket?.connected) {
+      // Player that accepted the request
+      const acceptRequestPlayer = this.gameRequestsUsers.find(
+        (user) => user.socketID === data.socketID
+      ) as User;
+
+      if (!acceptRequestPlayer.acceptedRequest)
+        return this.messagePlayerHandler({
+          message: `Error Accepting Player Request`,
+          status: 'error',
+        });
+
+      // Player that made the initial request
+      const requestPlayer = acceptRequestPlayer.requests.find(
+        (user) => user.socketID === this.socket?.id
+      ) as User;
+
+      if (!requestPlayer) return;
+      requestPlayer.isRequestAccepted = true;
+      requestPlayer.isRequestDeclined = false;
+
+      this.emitToPlayer(
+        acceptRequestPlayer,
+        requestPlayer,
+        'acceptPlayerRequest'
+      );
+
+      // Remove the users for list of connected Users because both users have accepted the request
+      // this.removeUser([acceptRequestPlayer, requestPlayer]);
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  declinePlayerRequest(data: User) {
     if (this.socket?.connected) {
       // Player that declined the request
       const declineRequestPlayer = this.gameRequestsUsers.find(
@@ -137,29 +174,24 @@ class UserConnection {
       if (declineRequestPlayer) {
         declineRequestPlayer.acceptedRequest = false;
         // Player that made the initial request
-        const requestPlayer = declineRequestPlayer.requests.find(
+        const declinePlayer = declineRequestPlayer.requests.find(
           (user) => user.socketID === data.socketID
         ) as User;
 
-        if (requestPlayer) {
-          requestPlayer.isRequestAccepted = false;
-          requestPlayer.isRequestDeclined = true;
+        if (declinePlayer) {
+          declinePlayer.isRequestAccepted = false;
+          declinePlayer.isRequestDeclined = true;
         }
-
-        this.emitToPlayer(
-          requestPlayer,
-          declineRequestPlayer,
-          'acceptRequestPlayer'
-        );
 
         this.messagePlayerHandler(
           {
-            title: 'Declined Game Request',
-            message: `${declineRequestPlayer.userName} declined your game request. Do you still want to another game request.`,
-            status: 'success',
+            message: `${declineRequestPlayer.userName} declined your game request.`,
+            status: 'warning',
           },
-          requestPlayer.socketID
+          declinePlayer.socketID
         );
+
+        this.removeGameRequestsUser(declinePlayer.socketID);
       }
     } else {
       console.error('Socket is not connected!');
@@ -184,6 +216,10 @@ class UserConnection {
     }
   }
 
+  // findPlayer(socketId: Socket) {
+  //   console.log(socketId);
+  // }
+
   requestGamePlayer2(data: User) {
     if (this.socket?.connected) {
       const requestedUser = this.gameRequestsUsers.find(
@@ -197,6 +233,14 @@ class UserConnection {
 
   emitToPlayer(reqData: User, resData: User, socketName: string) {
     this.io.to(reqData.socketID).emit(socketName, resData);
+  }
+
+  emitToSelf(data: User) {
+    if (this.socket?.connected) {
+      this.socket.emit('requestedPlayer', data);
+    } else {
+      console.error('Socket is not connected!');
+    }
   }
 
   emitActiveUsers() {
@@ -242,7 +286,25 @@ class UserConnection {
     });
   }
 
-  removeUser(removeUsers: Array<User>) {
+  removeGameRequestsUser(declineSocketID: string) {
+    if (this?.socket) {
+      this.gameRequestsUsers = this.gameRequestsUsers.map((user) => {
+        if (user.socketID === this.socket?.id) {
+          const filterUserRequests = user.requests.filter(
+            (u) => u.socketID !== declineSocketID
+          );
+          return { ...user, requests: filterUserRequests };
+        }
+        return user;
+      });
+      this.emitAllConnectedUsers();
+      this.emitAllGameRequestsUsers();
+    } else {
+      console.error('Socket is not connected!');
+    }
+  }
+
+  removeUsers(removeUsers: Array<User>) {
     if (this?.socket) {
       this.users = this.users.filter(
         (user) => !removeUsers.some((u) => u.socketID === user.socketID)
@@ -272,7 +334,7 @@ class UserConnection {
         });
       this.emitAllConnectedUsers();
       this.emitAllGameRequestsUsers();
-      console.log(`User Removed: ${this.socket.id} ❌`);
+      console.log(`User and Requests Removed: ${this.socket.id} ❌`);
     } else {
       console.error('Socket is not connected!');
     }
